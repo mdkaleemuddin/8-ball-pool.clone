@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>8 Ball Pool - Complete Free Version</title>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <!-- Matter.js Physics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.18.0/matter.min.js"></script>
+    <!-- Howler.js for Sound -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js"></script>
+    <style>
+        /* Base Styles */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1a2a3a, #0d1520);
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+            user-select: none;
+        }
+        
+        /* Game Container */
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: none; /* Initially hidden until auth */
+        }
+        
+        canvas {
+            display: block;
+            background-color: #0a5c36;
+        }
+        
+        /* UI Layers */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        /* Top Bar */
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            background: rgba(13, 21, 32, 0.8);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .player-info {
+            display: flex;
+            align-items: center;
+            pointer-events: auto;
+        }
+        
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #3498db, #9b59b6);
+            margin-right: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            border: 2px solid white;
+        }
+        
+        .player-name {
+            font-size: 16px;
+            font-weight: bold;
+        }
+        
+        .player-score {
+            font-size: 18px;
+            font-weight: bold;
+            color: #f1c40f;
+        }
+        
+        /* Bottom Controls */
+        .bottom-controls {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            padding: 15px;
+            background: rgba(13, 21, 32, 0.8);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .control-button {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            border: none;
+            color: white;
+            padding: 12px 25px;
+            margin: 0 10px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            pointer-events: auto;
+        }
+        
+        .control-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+        }
+        
+        .control-button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Power Meter */
+        .power-container {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 250px;
+            height: 15px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .power-meter {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(to right, #f1c40f, #e74c3c);
+            transition: width 0.05s;
+            border-radius: 10px;
+        }
+        
+        /* Aim Line */
+        .aim-line {
+            position: absolute;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.7);
+            transform-origin: left center;
+            pointer-events: none;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+        
+        /* Game Messages */
+        .game-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px 40px;
+            border-radius: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            display: none;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            z-index: 100;
+        }
+        
+        .game-message button {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #3498db;
+            border: none;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        /* Menu System */
+        .menu-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(13, 21, 32, 0.95);
+            z-index: 200;
+        }
+        
+        .menu-title {
+            font-size: 48px;
+            margin-bottom: 30px;
+            color: #3498db;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .menu-button {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            border: none;
+            color: white;
+            padding: 15px 40px;
+            margin: 10px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            width: 250px;
+            text-align: center;
+        }
+        
+        .menu-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+        }
+        
+        /* Auth Screens */
+        .auth-form {
+            display: flex;
+            flex-direction: column;
+            width: 300px;
+            margin-top: 20px;
+        }
+        
+        .auth-input {
+            padding: 12px 15px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        
+        .auth-button {
+            padding: 12px;
+            margin: 8px 0;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        
+        .auth-toggle {
+            margin-top: 15px;
+            color: #3498db;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        
+        /* Game Modes */
+        .mode-selector {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 600px;
+            margin: 20px 0;
+        }
+        
+        .mode-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 10px;
+            width: 180px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .mode-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .mode-icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+        
+        .mode-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        /* Loading Spinner */
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #3498db;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Responsive Adjustments */
+        @media (max-width: 768px) {
+            .menu-title {
+                font-size: 36px;
+            }
+            
+            .menu-button {
+                width: 200px;
+                padding: 12px 30px;
+            }
+            
+            .control-button {
+                padding: 10px 20px;
+                margin: 0 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Main Game Container (hidden until auth) -->
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <!-- UI Layers -->
+        <div class="ui-layer">
+            <div class="top-bar">
+                <div class="player-info" id="player1-info">
+                    <div class="avatar" id="player1-avatar">P1</div>
+                    <div>
+                        <div class="player-name" id="player1-name">Player 1</div>
+                        <div class="player-score" id="player1-score">0</div>
+                    </div>
+                </div>
+                
+                <div class="player-info">
+                    <button id="menu-button" class="control-button">☰ Menu</button>
+                </div>
+                
+                <div class="player-info" id="player2-info">
+                    <div>
+                        <div class="player-name" id="player2-name">Player 2</div>
+                        <div class="player-score" id="player2-score">0</div>
+                    </div>
+                    <div class="avatar" id="player2-avatar">P2</div>
+                </div>
+            </div>
+            
+            <div class="power-container">
+                <div class="power-meter" id="power-meter"></div>
+            </div>
+            
+            <div class="bottom-controls">
+                <button class="control-button" id="chat-button">💬 Chat</button>
+                <button class="control-button" id="camera-button">🎥 View</button>
+                <button class="control-button" id="shot-button">SHOT</button>
+                <button class="control-button" id="guide-button">🎯 Guide</button>
+            </div>
+            
+            <div class="game-message" id="game-message"></div>
+        </div>
+    </div>
+    
+    <!-- Main Menu -->
+    <div id="main-menu" class="menu-screen">
+        <h1 class="menu-title">8 BALL POOL</h1>
+        <button class="menu-button" id="play-button">🎮 PLAY GAME</button>
+        <button class="menu-button" id="multiplayer-button">🌐 MULTIPLAYER</button>
+        <button class="menu-button" id="how-to-play">📖 HOW TO PLAY</button>
+        <button class="menu-button" id="profile-button">👤 PROFILE</button>
+        <button class="menu-button" id="logout-button">🚪 LOGOUT</button>
+    </div>
+    
+    <!-- Game Mode Selection -->
+    <div id="mode-menu" class="menu-screen" style="display: none;">
+        <h1 class="menu-title">SELECT GAME MODE</h1>
+        <div class="mode-selector">
+            <div class="mode-card" data-mode="classic">
+                <div class="mode-icon">🎱</div>
+                <div class="mode-title">Classic</div>
+                <p>Standard 8-ball rules</p>
+            </div>
+            <div class="mode-card" data-mode="timed">
+                <div class="mode-icon">⏱️</div>
+                <div class="mode-title">Timed</div>
+                <p>30 seconds per shot</p>
+            </div>
+            <div class="mode-card" data-mode="9ball">
+                <div class="mode-icon">9️⃣</div>
+                <div class="mode-title">9-Ball</div>
+                <p>Shoot balls in order</p>
+            </div>
+            <div class="mode-card" data-mode="practice">
+                <div class="mode-icon">🎯</div>
+                <div class="mode-title">Practice</div>
+                <p>No rules, just fun</p>
+            </div>
+        </div>
+        <button class="menu-button" id="back-button">⬅ BACK</button>
+    </div>
+    
+    <!-- Multiplayer Lobby -->
+    <div id="multiplayer-lobby" class="menu-screen" style="display: none;">
+        <h1 class="menu-title">MULTIPLAYER</h1>
+        <div id="lobby-status">Finding opponent...</div>
+        <div class="spinner" id="lobby-spinner"></div>
+        <div id="room-code-display" style="display: none;">
+            <h3>Room Code:</h3>
+            <h2 id="room-code" style="color: #f1c40f; margin: 10px 0;"></h2>
+            <p>Share this code with a friend</p>
+        </div>
+        <button class="menu-button" id="cancel-matchmaking">CANCEL</button>
+    </div>
+    
+    <!-- Auth Screens -->
+    <div id="auth-screen" class="menu-screen">
+        <h1 class="menu-title">8 BALL POOL</h1>
+        <div id="login-form" class="auth-form">
+            <input type="email" id="login-email" class="auth-input" placeholder="Email">
+            <input type="password" id="login-password" class="auth-input" placeholder="Password">
+            <button id="login-button" class="auth-button">LOGIN</button>
+            <div id="toggle-register" class="auth-toggle">Create new account</div>
+        </div>
+        
+        <div id="register-form" class="auth-form" style="display: none;">
+            <input type="text" id="register-name" class="auth-input" placeholder="Display Name">
+            <input type="email" id="register-email" class="auth-input" placeholder="Email">
+            <input type="password" id="register-password" class="auth-input" placeholder="Password">
+            <button id="register-button" class="auth-button">REGISTER</button>
+            <div id="toggle-login" class="auth-toggle">Already have an account? Login</div>
+        </div>
+    </div>
+    
+    <!-- Profile Screen -->
+    <div id="profile-screen" class="menu-screen" style="display: none;">
+        <h1 class="menu-title">PROFILE</h1>
+        <div style="text-align: center; margin-bottom: 30px;">
+            <div class="avatar" id="profile-avatar" style="width: 80px; height: 80px; font-size: 30px; margin: 0 auto 10px;"></div>
+            <h2 id="profile-name">Username</h2>
+            <p id="profile-email">user@example.com</p>
+        </div>
+        
+        <div style="background: rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 10px; width: 300px; margin-bottom: 20px;">
+            <h3 style="margin-bottom: 15px;">STATS</h3>
+            <div style="display: flex; justify-content: space-between; margin: 10px 0;">
+                <span>Games Played:</span>
+                <span id="stats-games">0</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin: 10px 0;">
+                <span>Wins:</span>
+                <span id="stats-wins">0</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin: 10px 0;">
+                <span>Win Rate:</span>
+                <span id="stats-winrate">0%</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin: 10px 0;">
+                <span>Level:</span>
+                <span id="stats-level">1</span>
+            </div>
+        </div>
+        
+        <button class="menu-button" id="profile-back-button">BACK</button>
+    </div>
+    
+    <!-- How to Play Screen -->
+    <div id="how-to-play-screen" class="menu-screen" style="display: none;">
+        <h1 class="menu-title">HOW TO PLAY</h1>
+        <div style="max-width: 600px; padding: 20px; text-align: left; margin-bottom: 20px;">
+            <h3 style="margin: 15px 0 10px;">🎱 Game Rules:</h3>
+            <p>- Players are assigned either solids (1-7) or stripes (9-15) after the first ball is potted</p>
+            <p>- Pot all your assigned balls, then the 8-ball to win</p>
+            <p>- Potting the 8-ball early or potting the cue ball results in a foul</p>
+            
+            <h3 style="margin: 15px 0 10px;">🎮 Controls:</h3>
+            <p>- <strong>Mouse</strong>: Aim your shot</p>
+            <p>- <strong>SHOT button</strong>: First click starts power meter, second click takes shot</p>
+            <p>- <strong>View button</strong>: Toggle camera angles</p>
+            <p>- <strong>Guide button</strong>: Toggle aiming guide</p>
+        </div>
+        <button class="menu-button" id="how-to-play-back">BACK</button>
+    </div>
+
+    <script>
+        // Firebase Configuration (Replace with your own config)
+        const firebaseConfig = {
+            apiKey: "AIzaSyDummyAPIKeyDontUseThis1",
+            authDomain: "your-project-id.firebaseapp.com",
+            databaseURL: "https://your-project-id.firebaseio.com",
+            projectId: "your-project-id",
+            storageBucket: "your-project-id.appspot.com",
+            messagingSenderId: "123456789012",
+            appId: "1:123456789012:web:dummyappid12345"
+        };
+        
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const database = firebase.database();
+        
+        // Game Constants
+        const BALL_RADIUS = 15;
+        const BALL_DIAMETER = BALL_RADIUS * 2;
+        const TABLE_WIDTH = 800;
+        const TABLE_HEIGHT = 400;
+        const POCKET_RADIUS = 25;
+        
+        // Game Variables
+        let gameState = 'aiming'; // 'aiming', 'charging', 'shooting', 'gameOver'
+        let currentPlayer = 'player1'; // 'player1' or 'player2'
+        let playerType = null; // 'solid' or 'stripe'
+        let power = 0;
+        let powerIncreasing = true;
+        let aimAngle = 0;
+        let balls = [];
+        let pockets = [];
+        let cueBall = null;
+        let world, engine, render;
+        let isFirstHit = true;
+        let gameMode = 'classic';
+        let multiplayerGame = false;
+        let roomId = null;
+        let currentUser = null;
+        let userStats = {
+            games: 0,
+            wins: 0,
+            level: 1,
+            xp: 0
+        };
+        
+        // Sound Effects
+        const sounds = {
+            ballHit: new Howl({ src: ['https://assets.codepen.io/21542/pool-ball-hit.mp3'] }),
+            ballPot: new Howl({ src: ['https://assets.codepen.io/21542/pool-ball-pot.mp3'] }),
+            cueHit: new Howl({ src: ['https://assets.codepen.io/21542/pool-cue-hit.mp3'] }),
+            win: new Howl({ src: ['https://assets.codepen.io/21542/pool-win.mp3'] }),
+            lose: new Howl({ src: ['https://assets.codepen.io/21542/pool-lose.mp3'] }),
+            foul: new Howl({ src: ['https://assets.codepen.io/21542/pool-foul.mp3'] })
+        };
+        
+        // DOM Elements
+        const canvas = document.getElementById('game-canvas');
+        const powerMeter = document.getElementById('power-meter');
+        const shotButton = document.getElementById('shot-button');
+        const gameMessage = document.getElementById('game-message');
+        const playButton = document.getElementById('play-button');
+        const multiplayerButton = document.getElementById('multiplayer-button');
+        const howToPlayButton = document.getElementById('how-to-play');
+        const profileButton = document.getElementById('profile-button');
+        const logoutButton = document.getElementById('logout-button');
+        const menuButton = document.getElementById('menu-button');
+        const backButton = document.getElementById('back-button');
+        const modeMenu = document.getElementById('mode-menu');
+        const mainMenu = document.getElementById('main-menu');
+        const authScreen = document.getElementById('auth-screen');
+        const loginForm = document.getElementById('login-form');
+        const registerForm = document.getElementById('register-form');
+        const toggleRegister = document.getElementById('toggle-register');
+        const toggleLogin = document.getElementById('toggle-login');
+        const loginButton = document.getElementById('login-button');
+        const registerButton = document.getElementById('register-button');
+        const multiplayerLobby = document.getElementById('multiplayer-lobby');
+        const cancelMatchmaking = document.getElementById('cancel-matchmaking');
+        const lobbyStatus = document.getElementById('lobby-status');
+        const roomCodeDisplay = document.getElementById('room-code-display');
+        const roomCode = document.getElementById('room-code');
+        const profileScreen = document.getElementById('profile-screen');
+        const profileBackButton = document.getElementById('profile-back-button');
+        const howToPlayScreen = document.getElementById('how-to-play-screen');
+        const howToPlayBack = document.getElementById('how-to-play-back');
+        
+        // Initialize the game
+        function initGame() {
+            // Setup canvas
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Setup Matter.js
+            engine = Matter.Engine.create({
+                gravity: { x: 0, y: 0 },
+                enableSleeping: true
+            });
+            
+            world = engine.world;
+            render = Matter.Render.create({
+                canvas: canvas,
+                engine: engine,
+                options: {
+                    width: canvas.width,
+                    height: canvas.height,
+                    wireframes: false,
+                    background: '#1a2a3a',
+                    showSleeping: false
+                }
+            });
+            
+            // Improve physics realism
+            Matter.Runner.run(engine);
+            Matter.Render.run(render);
+            
+            // Event listeners
+            setupEventListeners();
+            
+            // Check auth state
+            auth.onAuthStateChanged(user => {
+                if (user) {
+                    // User is signed in
+                    currentUser = user;
+                    loadUserStats();
+                    showMainMenu();
+                } else {
+                    // No user signed in
+                    showAuthScreen();
+                }
+            });
+        }
+        
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            if (render) {
+                render.options.width = canvas.width;
+                render.options.height = canvas.height;
+                Matter.Render.setPixelRatio(render, window.devicePixelRatio);
+            }
+        }
+        
+        function setupEventListeners() {
+            // Game controls
+            shotButton.addEventListener('click', takeShot);
+            canvas.addEventListener('mousemove', handleAiming);
+            canvas.addEventListener('touchmove', handleTouchAiming, { passive: false });
+            canvas.addEventListener('click', handleCanvasClick);
+            canvas.addEventListener('touchend', handleCanvasClick);
+            
+            // Menu navigation
+            playButton.addEventListener('click', showModeMenu);
+            multiplayerButton.addEventListener('click', startMultiplayerMatchmaking);
+            howToPlayButton.addEventListener('click', showHowToPlay);
+            profileButton.addEventListener('click', showProfile);
+            logoutButton.addEventListener('click', signOut);
+            menuButton.addEventListener('click', showMainMenu);
+            backButton.addEventListener('click', showMainMenu);
+            profileBackButton.addEventListener('click', showMainMenu);
+            howToPlayBack.addEventListener('click', showMainMenu);
+            cancelMatchmaking.addEventListener('click', cancelMultiplayerMatchmaking);
+            
+            // Mode selection
+            document.querySelectorAll('.mode-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    gameMode = card.dataset.mode;
+                    startSinglePlayerGame();
+                });
+            });
+            
+            // Auth forms
+            toggleRegister.addEventListener('click', () => {
+                loginForm.style.display = 'none';
+                registerForm.style.display = 'flex';
+            });
+            
+            toggleLogin.addEventListener('click', () => {
+                registerForm.style.display = 'none';
+                loginForm.style.display = 'flex';
+            });
+            
+            loginButton.addEventListener('click', signIn);
+            registerButton.addEventListener('click', register);
+            
+            // Power meter animation
+            setInterval(updatePowerMeter, 50);
+            
+            // Game loop
+            setInterval(gameLoop, 16);
+        }
+        
+        function startSinglePlayerGame() {
+            multiplayerGame = false;
+            resetGame();
+            modeMenu.style.display = 'none';
+            document.getElementById('game-container').style.display = 'block';
+            
+            // Set player names
+            document.getElementById('player1-name').textContent = currentUser.displayName || 'Player';
+            document.getElementById('player2-name').textContent = 'Computer';
+            
+            // Set player avatars
+            document.getElementById('player1-avatar').textContent = currentUser.displayName ? currentUser.displayName.charAt(0).toUpperCase() : 'P';
+            document.getElementById('player2-avatar').textContent = 'C';
+        }
+        
+        function startMultiplayerGame(roomId, isHost) {
+            multiplayerGame = true;
+            this.roomId = roomId;
+            resetGame();
+            multiplayerLobby.style.display = 'none';
+            document.getElementById('game-container').style.display = 'block';
+            
+            if (isHost) {
+                // Host creates the game state in Firebase
+                const gameRef = database.ref(`games/${roomId}`);
+                gameRef.set({
+                    player1: currentUser.uid,
+                    player1Name: currentUser.displayName || 'Player 1',
+                    player2: null,
+                    player2Name: 'Waiting...',
+                    currentPlayer: 'player1',
+                    gameState: 'waiting',
+                    balls: {},
+                    cueBall: {}
+                });
+                
+                // Listen for opponent joining
+                gameRef.on('value', snapshot => {
+                    const gameData = snapshot.val();
+                    if (gameData.player2) {
+                        // Opponent joined
+                        document.getElementById('player2-name').textContent = gameData.player2Name;
+                        document.getElementById('player2-avatar').textContent = gameData.player2Name ? gameData.player2Name.charAt(0).toUpperCase() : 'P';
+                        
+                        if (gameData.gameState === 'playing') {
+                            // Start the game
+                            updateGameFromFirebase(gameData);
+                        }
+                    }
+                });
+            } else {
+                // Join existing game
+                const gameRef = database.ref(`games/${roomId}`);
+                gameRef.on('value', snapshot => {
+                    const gameData = snapshot.val();
+                    if (gameData) {
+                        updateGameFromFirebase(gameData);
+                    }
+                });
+            }
+        }
+        
+        function updateGameFromFirebase(gameData) {
+            // Update player info
+            document.getElementById('player1-name').textContent = gameData.player1Name;
+            document.getElementById('player2-name').textContent = gameData.player2Name;
+            
+            document.getElementById('player1-avatar').textContent = gameData.player1Name ? gameData.player1Name.charAt(0).toUpperCase() : 'P';
+            document.getElementById('player2-avatar').textContent = gameData.player2Name ? gameData.player2Name.charAt(0).toUpperCase() : 'P';
+            
+            // Update game state
+            currentPlayer = gameData.currentPlayer;
+            
+            // Update balls positions (would need more complex sync in real implementation)
+            // This is simplified for the example
+        }
+        
+        function startMultiplayerMatchmaking() {
+            mainMenu.style.display = 'none';
+            multiplayerLobby.style.display = 'flex';
+            lobbyStatus.textContent = 'Finding opponent...';
+            roomCodeDisplay.style.display = 'none';
+            
+            // In a real implementation, you would:
+            // 1. Search for existing open games
+            // 2. If none found, create a new room
+            // 3. For demo, we'll simulate finding a game after 3 seconds
+            
+            setTimeout(() => {
+                // Simulate finding a game
+                const simulatedRoomId = 'DEMO' + Math.floor(1000 + Math.random() * 9000);
+                roomCode.textContent = simulatedRoomId;
+                lobbyStatus.textContent = 'Share this code with a friend:';
+                roomCodeDisplay.style.display = 'block';
+                
+                // For demo, auto-join after 5 seconds
+                setTimeout(() => {
+                    startMultiplayerGame(simulatedRoomId, true);
+                }, 5000);
+            }, 3000);
+        }
+        
+        function cancelMultiplayerMatchmaking() {
+            multiplayerLobby.style.display = 'none';
+            mainMenu.style.display = 'flex';
+            // In real implementation, clean up any pending matchmaking
+        }
+        
+        function createTable() {
+            const wallThickness = 20;
+            const tableX = canvas.width / 2 - TABLE_WIDTH / 2;
+            const tableY = canvas.height / 2 - TABLE_HEIGHT / 2;
+            
+            // Table borders with improved physics
+            const leftWall = Matter.Bodies.rectangle(
+                tableX - wallThickness / 2, 
+                tableY + TABLE_HEIGHT / 2, 
+                wallThickness, 
+                TABLE_HEIGHT + wallThickness * 2, 
+                { 
+                    isStatic: true, 
+                    render: { fillStyle: '#5d4037' },
+                    friction: 0.05,
+                    restitution: 0.7
+                }
+            );
+            
+            const rightWall = Matter.Bodies.rectangle(
+                tableX + TABLE_WIDTH + wallThickness / 2, 
+                tableY + TABLE_HEIGHT / 2, 
+                wallThickness, 
+                TABLE_HEIGHT + wallThickness * 2, 
+                { 
+                    isStatic: true, 
+                    render: { fillStyle: '#5d4037' },
+                    friction: 0.05,
+                    restitution: 0.7
+                }
+            );
+            
+            const topWall = Matter.Bodies.rectangle(
+                tableX + TABLE_WIDTH / 2, 
+                tableY - wallThickness / 2, 
+                TABLE_WIDTH, 
+                wallThickness, 
+                { 
+                    isStatic: true, 
+                    render: { fillStyle: '#5d4037' },
+                    friction: 0.05,
+                    restitution: 0.7
+                }
+            );
+            
+            const bottomWall = Matter.Bodies.rectangle(
+                tableX + TABLE_WIDTH / 2, 
+                tableY + TABLE_HEIGHT + wallThickness / 2, 
+                TABLE_WIDTH, 
+                wallThickness, 
+                { 
+                    isStatic: true, 
+                    render: { fillStyle: '#5d4037' },
+                    friction: 0.05,
+                    restitution: 0.7
+                }
+            );
+            
+            Matter.Composite.add(world, [leftWall, rightWall, topWall, bottomWall]);
+            
+            // Table surface with improved visuals
+            const tableSurface = Matter.Bodies.rectangle(
+                tableX + TABLE_WIDTH / 2, 
+                tableY + TABLE_HEIGHT / 2, 
+                TABLE_WIDTH, 
+                TABLE_HEIGHT, 
+                { 
+                    isStatic: true, 
+                    isSensor: true,
+                    render: { 
+                        fillStyle: '#0a5c36',
+                        strokeStyle: '#157a4a',
+                        lineWidth: 2
+                    } 
+                }
+            );
+            
+            Matter.Composite.add(world, tableSurface);
+        }
+        
+        function createPockets() {
+            const tableX = canvas.width / 2 - TABLE_WIDTH / 2;
+            const tableY = canvas.height / 2 - TABLE_HEIGHT / 2;
+            
+            // Corner pockets with improved visuals
+            pockets = [
+                createPocket(tableX, tableY),
+                createPocket(tableX + TABLE_WIDTH, tableY),
+                createPocket(tableX, tableY + TABLE_HEIGHT),
+                createPocket(tableX + TABLE_WIDTH, tableY + TABLE_HEIGHT),
+                // Middle pockets
+                createPocket(tableX + TABLE_WIDTH / 2, tableY - 10),
+                createPocket(tableX + TABLE_WIDTH / 2, tableY + TABLE_HEIGHT + 10)
+            ];
+            
+            Matter.Composite.add(world, pockets);
+        }
+        
+        function createPocket(x, y) {
+            return Matter.Bodies.circle(x, y, POCKET_RADIUS, { 
+                isStatic: true, 
+                isSensor: true,
+                render: { 
+                    fillStyle: '#000000',
+                    strokeStyle: '#333333',
+                    lineWidth: 2
+                },
+                label: 'pocket'
+            });
+        }
+        
+        function createBalls() {
+            const tableX = canvas.width / 2 - TABLE_WIDTH / 2;
+            const tableY = canvas.height / 2 - TABLE_HEIGHT / 2;
+            
+            // Cue ball (white) with improved visuals
+            cueBall = Matter.Bodies.circle(
+                tableX + TABLE_WIDTH / 4, 
+                tableY + TABLE_HEIGHT / 2, 
+                BALL_RADIUS, 
+                { 
+                    restitution: 0.95,
+                    friction: 0.005,
+                    frictionAir: 0.01,
+                    render: { 
+                        fillStyle: '#ffffff',
+                        strokeStyle: '#eeeeee',
+                        lineWidth: 2
+                    },
+                    label: 'cue'
+                }
+            );
+            
+            // Ball colors and numbers (solids and stripes)
+            const ballData = [
+                { color: '#ff0000', number: 1 },   // Red
+                { color: '#00aa00', number: 2 },   // Green
+                { color: '#0000ff', number: 3 },    // Blue
+                { color: '#aa00aa', number: 
